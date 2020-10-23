@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en-US">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>GraphQL резолверы | Alterforia</title>
+    <meta name="generator" content="VuePress 1.5.4">
+    
+    <meta name="description" content="Да, наконец-то техническая статья :)
+
+Резолверы это ядро языка запросов, о котором пойдёт речь.
+
+Сначала пара слов о том, что такое GraphQL и зачем он понадобился.
+
+Когда микросервисы вошли в обиход л ...">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="preload" href="/assets/css/0.styles.6cfefd29.css" as="style"><link rel="preload" href="/assets/js/app.10d18ab1.js" as="script"><link rel="preload" href="/assets/js/10.062fc280.js" as="script"><link rel="preload" href="/assets/js/25.878c3ac7.js" as="script"><link rel="prefetch" href="/assets/js/11.285cf3e4.js"><link rel="prefetch" href="/assets/js/12.ddae27da.js"><link rel="prefetch" href="/assets/js/13.8fb76647.js"><link rel="prefetch" href="/assets/js/14.12b7f33e.js"><link rel="prefetch" href="/assets/js/15.389802df.js"><link rel="prefetch" href="/assets/js/16.04cb7a9c.js"><link rel="prefetch" href="/assets/js/17.04348b78.js"><link rel="prefetch" href="/assets/js/18.2145fadf.js"><link rel="prefetch" href="/assets/js/19.42da0c36.js"><link rel="prefetch" href="/assets/js/20.dec9b04e.js"><link rel="prefetch" href="/assets/js/21.e908558b.js"><link rel="prefetch" href="/assets/js/22.a31dad3c.js"><link rel="prefetch" href="/assets/js/23.5094b826.js"><link rel="prefetch" href="/assets/js/24.279153e5.js"><link rel="prefetch" href="/assets/js/26.f6b643c4.js"><link rel="prefetch" href="/assets/js/27.4e55393f.js"><link rel="prefetch" href="/assets/js/28.0415a536.js"><link rel="prefetch" href="/assets/js/29.6b1745bc.js"><link rel="prefetch" href="/assets/js/3.10f36081.js"><link rel="prefetch" href="/assets/js/30.2d210eb0.js"><link rel="prefetch" href="/assets/js/31.12dea0f0.js"><link rel="prefetch" href="/assets/js/32.4f508493.js"><link rel="prefetch" href="/assets/js/4.abfe4cef.js"><link rel="prefetch" href="/assets/js/5.1265bc6d.js"><link rel="prefetch" href="/assets/js/6.895c4108.js"><link rel="prefetch" href="/assets/js/7.25c316f3.js"><link rel="prefetch" href="/assets/js/8.4d9fd57b.js"><link rel="prefetch" href="/assets/js/9.d6bd5f9b.js"><link rel="prefetch" href="/assets/js/vuejs-paginate.6bbfc016.js">
+    <link rel="stylesheet" href="/assets/css/0.styles.6cfefd29.css">
+  </head>
+  <body>
+    <div id="app" data-server-rendered="true"><main data-v-6ef32fc1><header id="large-header" class="site-header" data-v-6ef32fc1><canvas id="canvas"></canvas> <div class="animation-toggler top-2"><a href="javascript:void(0)">Вкл!</a></div> <div class="page-title">GraphQL резолверы</div></header> <div class="content-wrapper" data-v-6ef32fc1><main data-v-6ef32fc1><article><div class="content__default"><p>Да, наконец-то техническая статья 😃</p> <p>Резолверы это ядро языка запросов, о котором пойдёт речь.</p> <p>Сначала пара слов о том, что такое GraphQL и зачем он понадобился.</p> <p>Когда микросервисы вошли в обиход любого мало-мальски серьезного проекта, собирать данные на клиенте - делая несколько запросов - стало большой болью фронтенд-разработчиков. Несмотря на то, что мы уже активно пользуемся null-safe navigation operator (?.) для предотвращения падений из-за отсутствия каких-либо данных, приходящая с сервера модель может отличаться от контрактной, да и собирать запросы в кучу через Promise.all или RxJS тоже требует особого образования и мышления.</p> <p>Сначала мы ввели понятие BFF (Backend-for-Frontend) и его разновидность Backend-in-the-Frontend. Суть в том, чтобы агрегировать запросы в модели данных, необходимые клиенту, но в случае REST API, запросы все-равно имели место быть неудобными и деревянными. И нужно было пилить собственный json-schema валидатор чтобы быть уверенным что данные соответствуют контракту.</p> <p>GraphQL решает эту задачу наилучшим образом, позволяя клиенту делать запросы вида:</p> <div class="language- extra-class"><pre class="language-text"><code>query Category {
+    category(id:12) {
+        products(limit:3) {
+            name
+            price
+            photoUrl
+        }
+        subCategories {
+            name
+            photoUrl
+        }
+    }
+}
+</code></pre></div><p>Запрос при этом проходит три фазы:</p> <ol><li>построение абстрактного синтаксического дерева (AST)</li> <li>валидация AST на соответствие каталогу типов (schema)</li> <li>исполнение резолверов полей для формирования результата в JSON-формате (автору JSON нравится когда это произносят с французским прононсом)</li></ol> <p>Резолверы работают следующим образом:</p> <ul><li>запросы на одном уровне дерева исполняются в параллели</li> <li>если запрос асинхронный, его потомки ждут пока он &quot;зарезолвится&quot;</li> <li>поскольку запросы выполняются в параллели, лучше всего если они атомарны, идемпотентны (один и тот же запрос приводит к одинаковым результатам) и без сайд-эффектов (нетоксичными 😃)</li></ul> <p>Сигнатура метода резолвера проста:</p> <div class="language-js extra-class"><pre class="language-js"><code><span class="token function">fieldName</span><span class="token punctuation">(</span><span class="token parameter">parent<span class="token punctuation">,</span> args<span class="token punctuation">,</span> context<span class="token punctuation">,</span> info</span><span class="token punctuation">)</span> <span class="token punctuation">{</span> result <span class="token punctuation">}</span> 
+</code></pre></div><p>Где,</p> <ul><li><strong>parent —</strong> данные родительского резолвера,</li> <li><strong>args —</strong> параметры, переданные в query,</li> <li><strong>context —</strong> объект, который предоставлен всем резолвером, который можно менять (но не стоит), он чистится между запросами, в нём принято хранить данные аутентификации и авторизации, модели, фетчеры, данные запросов. Не стоит использовать его для кеширования</li> <li><strong>info —</strong> редко используемый объект, специфичная информация для поля</li></ul> <p>Необязательно создавать резолвер на каждое поле, достаточно указать корневой, остальные подставятся сами.</p> <p>Несмотря на очевидное преимущество перед REST API в удобстве использования, GraphQL имеет несколько недостатков.</p> <p>GraphQL не даёт делать рекурсивные запросы (надеюсь, не нужно объяснять почему, это скорее фича, а не баг), каждое вложенное поле нужно описывать явно, ограничивая дерево запросов.</p> <p>В случае когда корень дерева содержит множество элементов, и вы запрашиваете поле внутри каждого из них, которое тоже является отдельным запросом, вы рискуете сделать сотни запросов. Это называется проблемой N+1. Проще говоря, это проблема &quot;batch&quot; запросов.Каждый случай индивидуален, но для решения вполне можно использовать context для кеширования промежуточных данных.</p> <p>Источник вдохновения:
+https://medium.com/paypal-engineering/graphql-resolvers-best-practices-cd36fdbcef55</p></div></article></main></div> <footer class="footer" data-v-6c022017 data-v-6ef32fc1><div class="footer-right-wrap" data-v-6c022017><p data-v-6c022017>Alterforia - персональный блог разработчика, музыканта и человека.</p></div></footer></main><div class="global-ui"></div></div>
+    <script src="/assets/js/app.10d18ab1.js" defer></script><script src="/assets/js/10.062fc280.js" defer></script><script src="/assets/js/25.878c3ac7.js" defer></script>
+  </body>
+</html>
