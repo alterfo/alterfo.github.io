@@ -189,7 +189,7 @@
       play, pause, resume, isPlaying, getAudioFrame,
     } from './audio.js';
     import { initRenderer, startLoop, addFrameTick } from './renderer.js';
-    import { initRDPipeline } from './rd.js';
+    import { initParticlePipeline } from './particles.js';
     import { initFeedbackPipeline } from './feedback.js';
     import { initRenderPipeline } from './render.js';
     import { initRecord, startRecording, stopRecording, isRecording } from './record.js';
@@ -226,14 +226,14 @@
         console.error('[engine] WASM load failed:', e);
       }
 
-      /* ---- WebGPU renderer + RD pipeline ---- */
+      /* ---- WebGPU renderer + particle pipeline ---- */
       let advPanel = null;
       try {
         const { device, textures, passes } = await initRenderer(canvas);
-        const { tick: rdTick } = await initRDPipeline(device, textures, passes);
-        const { tick: fbTick } = await initFeedbackPipeline(device, textures, passes);
-        const { tick: renderTick } = await initRenderPipeline(device, textures, passes);
-        addFrameTick(rdTick);
+        const { tick: particleTick } = await initParticlePipeline(device, textures, passes);
+        const { tick: fbTick }       = await initFeedbackPipeline(device, textures, passes);
+        const { tick: renderTick }   = await initRenderPipeline(device, textures, passes);
+        addFrameTick(particleTick);
         addFrameTick(fbTick);
         addFrameTick(renderTick);
         startLoop();

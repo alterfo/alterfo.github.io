@@ -5,30 +5,39 @@ import {
     getAudioFrame, getCurrentTime, getDuration,
     getBeatTimestamps, seekTo,
 } from './audio.js';
-import { setRDParams } from './rd.js';
+import { setParticleParams } from './particles.js';
 import { setFeedbackParams } from './feedback.js';
 import { setRenderParams, PALETTES } from './render.js';
 import { setRecordParams } from './record.js';
 
-const LS_KEY = 'arfluid_advanced_v1';
+const LS_KEY = 'arfluid_advanced_v4';
 
 const PALETTE_NAMES = ['Cyberpunk', 'Fire', 'Ocean', 'Matrix'];
 
 const SLIDERS = [
-    { key: 'feed',       label: 'Feed',      min: 0.010, max: 0.040, step: 0.001, places: 3 },
-    { key: 'kill',       label: 'Kill',      min: 0.045, max: 0.065, step: 0.001, places: 3 },
-    { key: 'decay',      label: 'Decay',     min: 0.70,  max: 0.99,  step: 0.01,  places: 2 },
-    { key: 'warpAmount', label: 'Warp px',   min: 0,     max: 40,    step: 1,     places: 0 },
-    { key: 'hueScale',   label: 'Hue Scale', min: 0,     max: 3,     step: 0.1,   places: 1 },
+    { key: 'noiseScale', label: 'Vortex',   min: 1.0,  max: 10.0, step: 0.5,  places: 1 },
+    { key: 'noiseSpeed', label: 'Drift',    min: 0.1,  max: 2.0,  step: 0.1,  places: 1 },
+    { key: 'decay',      label: 'Trails',   min: 0.88, max: 0.99, step: 0.01, places: 2 },
+    { key: 'lifetime',   label: 'Lifetime', min: 60,   max: 600,  step: 30,   places: 0 },
+    { key: 'hueScale',   label: 'Hue Spd',  min: 0,    max: 3,    step: 0.1,  places: 1 },
 ];
 
 const BAND_OPTIONS = ['off', 'sub', 'bass', 'mid', 'high'];
 
+// Named presets — each evokes a different abstract visual mood
+const PRESETS = [
+    { name: 'Plasma',  noiseScale: 4.0, noiseSpeed: 0.6,  decay: 0.96, lifetime: 240, hueScale: 1.0 },
+    { name: 'Vortex',  noiseScale: 7.0, noiseSpeed: 0.4,  decay: 0.97, lifetime: 360, hueScale: 0.5 },
+    { name: 'Aurora',  noiseScale: 2.5, noiseSpeed: 0.3,  decay: 0.98, lifetime: 480, hueScale: 0.3 },
+    { name: 'Storm',   noiseScale: 6.0, noiseSpeed: 1.5,  decay: 0.93, lifetime: 120, hueScale: 3.0 },
+    { name: 'Minimal', noiseScale: 2.0, noiseSpeed: 0.9,  decay: 0.95, lifetime: 180, hueScale: 2.0 },
+];
+
 const DEFAULTS = {
-    feed: 0.022, kill: 0.051, decay: 0.92, warpAmount: 12, hueScale: 1.0,
+    noiseScale: 4.0, noiseSpeed: 0.6, decay: 0.96, lifetime: 240, hueScale: 1.0,
     blendMode: 0, paletteIdx: 0,
     resolution: '1080p', bitrate: 8, codec: 'vp9',
-    bindings: { feed: 'off', kill: 'off', decay: 'off', warpAmount: 'off', hueScale: 'off' },
+    bindings: { noiseScale: 'off', noiseSpeed: 'off', decay: 'off', lifetime: 'off', hueScale: 'off' },
 };
 
 // Interpolate between two flat-12-float palette arrays.
@@ -91,6 +100,15 @@ function injectStyles() {
             width: 100%; cursor: pointer;
         }
         .bind-sel:focus { outline: none; border-color: #8b00ff; }
+        .preset-row { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 2px; }
+        .preset-btn {
+            flex: 1; min-width: 50px; padding: 6px 3px;
+            background: #0d0020; border: 1px solid #2a004a; color: #888;
+            border-radius: 4px; cursor: pointer; font-size: 0.68rem; text-align: center;
+            transition: border-color 0.15s, color 0.15s, background 0.15s;
+        }
+        .preset-btn.active { background: #1a0035; border-color: #00ffcc; color: #00ffcc; }
+        .preset-btn:hover:not(.active) { border-color: #8b00ff; color: #c080ff; }
         .pal-row { display: flex; gap: 5px; flex-wrap: wrap; }
         .pal-btn {
             flex: 1; min-width: 56px; padding: 5px 4px;
@@ -138,10 +156,18 @@ function buildPanelHTML() {
         `<button class="pal-btn" data-idx="${i}">${n}</button>`
     ).join('');
 
+    const presetBtns = PRESETS.map(p =>
+        `<button class="preset-btn" data-preset="${p.name}">${p.name}</button>`
+    ).join('');
+
     return `
         <div class="adv-header">
             Advanced
             <button id="adv-close">✕</button>
+        </div>
+        <div class="adv-section">
+            <div class="adv-label">Presets</div>
+            <div class="preset-row">${presetBtns}</div>
         </div>
         <div class="adv-section">
             <div class="adv-label">Spectrum</div>
@@ -330,6 +356,47 @@ export function initAdvanced({ canvasWrap, onClose } = {}) {
         });
     }
 
+    // ---- Preset buttons ----------------------------------------------------
+    const presetBtnEls = panel.querySelectorAll('.preset-btn');
+
+    function applyPreset(name) {
+        const p = PRESETS.find(pr => pr.name === name);
+        if (!p) return;
+        // Copy preset values into state
+        Object.assign(state, {
+            noiseScale: p.noiseScale,
+            noiseSpeed: p.noiseSpeed,
+            decay:      p.decay,
+            lifetime:   p.lifetime,
+            hueScale:   p.hueScale,
+        });
+        // Sync all slider elements to new values
+        for (const s of SLIDERS) {
+            const input   = panel.querySelector(`#sl-${s.key}`);
+            const valSpan = panel.querySelector(`#sl-val-${s.key}`);
+            if (input && state[s.key] !== undefined) {
+                input.value = state[s.key];
+                if (valSpan) valSpan.textContent = Number(state[s.key]).toFixed(s.places);
+            }
+        }
+        presetBtnEls.forEach(b => b.classList.toggle('active', b.dataset.preset === name));
+        applyParams();
+        save();
+    }
+
+    presetBtnEls.forEach(btn => {
+        btn.addEventListener('click', () => applyPreset(btn.dataset.preset));
+    });
+
+    // Highlight preset if current state matches one exactly
+    const matchingPreset = PRESETS.find(p =>
+        p.noiseScale === state.noiseScale && p.noiseSpeed === state.noiseSpeed &&
+        p.decay === state.decay && p.lifetime === state.lifetime
+    );
+    if (matchingPreset) {
+        panel.querySelector(`[data-preset="${matchingPreset.name}"]`)?.classList.add('active');
+    }
+
     // ---- Blend mode --------------------------------------------------------
     const blendSel = panel.querySelector('#blend-mode');
     blendSel.value = state.blendMode;
@@ -423,10 +490,14 @@ export function initAdvanced({ canvasWrap, onClose } = {}) {
 
     // ---- Apply helpers -----------------------------------------------------
     function applyParams() {
-        setRDParams({ feed: state.feed, kill: state.kill });
-        setFeedbackParams({ decayNormal: state.decay, warpAmount: state.warpAmount });
+        setParticleParams({
+            noiseScale: state.noiseScale,
+            noiseSpeed: state.noiseSpeed,
+            lifetime:   state.lifetime,
+        });
+        setFeedbackParams({ decayNormal: state.decay });
         setRenderParams({
-            palette:  currentPalette(),
+            palette:   currentPalette(),
             blendMode: state.blendMode,
             hueScale:  state.hueScale,
         });
@@ -440,7 +511,6 @@ export function initAdvanced({ canvasWrap, onClose } = {}) {
             mid: frame.mid, high: frame.high,
         };
 
-        // Compute effective values (audio-bind modulates slider baseline)
         function effective(s) {
             const band = state.bindings[s.key];
             if (!band || band === 'off') return state[s.key];
@@ -449,14 +519,14 @@ export function initAdvanced({ canvasWrap, onClose } = {}) {
             return Math.max(s.min, Math.min(s.max, state[s.key] + bv * range * 0.4));
         }
 
-        const feed       = effective(SLIDERS[0]);
-        const kill       = effective(SLIDERS[1]);
+        const noiseScale = effective(SLIDERS[0]);
+        const noiseSpeed = effective(SLIDERS[1]);
         const decay      = effective(SLIDERS[2]);
-        const warpAmount = effective(SLIDERS[3]);
+        const lifetime   = effective(SLIDERS[3]);
         const hueScale   = effective(SLIDERS[4]);
 
-        setRDParams({ feed, kill });
-        setFeedbackParams({ decayNormal: decay, warpAmount });
+        setParticleParams({ noiseScale, noiseSpeed, lifetime });
+        setFeedbackParams({ decayNormal: decay });
         setRenderParams({
             palette:   currentPalette(),
             blendMode: state.blendMode,

@@ -4,10 +4,14 @@
 
 import { getAudioFrame } from './audio.js';
 
-export const WIDTH  = 1920;   // simulation + record resolution
-export const HEIGHT = 1080;
+export const SIM_WIDTH  = 960;    // simulation resolution (= display)
+export const SIM_HEIGHT = 540;
+export const WIDTH  = SIM_WIDTH;  // alias used by pipelines
+export const HEIGHT = SIM_HEIGHT;
 export const PREVIEW_WIDTH  = 960;   // display canvas resolution
 export const PREVIEW_HEIGHT = 540;
+export const RECORD_WIDTH  = 1920;   // record/export resolution
+export const RECORD_HEIGHT = 1080;
 
 let _device   = null;
 let _adapter  = null;
@@ -34,16 +38,17 @@ class TextureManager {
         this._t = {};
     }
 
-    create(name, width = WIDTH, height = HEIGHT, format = 'rgba32float') {
+    create(name, width = WIDTH, height = HEIGHT, format = 'rgba32float', usage = null) {
+        const defaultUsage =
+            GPUTextureUsage.TEXTURE_BINDING |
+            GPUTextureUsage.STORAGE_BINDING  |
+            GPUTextureUsage.COPY_SRC         |
+            GPUTextureUsage.COPY_DST;
         const tex = this._d.createTexture({
             label: name,
             size: [width, height],
             format,
-            usage:
-                GPUTextureUsage.TEXTURE_BINDING |
-                GPUTextureUsage.STORAGE_BINDING  |
-                GPUTextureUsage.COPY_SRC         |
-                GPUTextureUsage.COPY_DST,
+            usage: usage ?? defaultUsage,
         });
         this._t[name] = tex;
         return tex;
@@ -97,7 +102,7 @@ class PassManager {
                     colorAttachments: [{
                         view,
                         clearValue: p.dispatch.clearValue ?? { r: 0, g: 0, b: 0, a: 1 },
-                        loadOp:  'load',
+                        loadOp:  p.dispatch.loadOp ?? 'load',
                         storeOp: 'store',
                     }],
                 });
@@ -150,8 +155,8 @@ export async function initRenderer(canvas) {
     // Using HTMLCanvasElement (not OffscreenCanvas) because VideoFrame can only
     // be created from an HTMLCanvasElement with a webgpu context, not OffscreenCanvas.
     _offscreenCanvas = document.createElement('canvas');
-    _offscreenCanvas.width  = WIDTH;
-    _offscreenCanvas.height = HEIGHT;
+    _offscreenCanvas.width  = RECORD_WIDTH;
+    _offscreenCanvas.height = RECORD_HEIGHT;
     _offscreenContext = _offscreenCanvas.getContext('webgpu');
     _offscreenContext.configure({
         device: _device,
@@ -160,11 +165,12 @@ export async function initRenderer(canvas) {
         alphaMode: 'opaque',
     });
 
-    // Ping-pong texture pairs (RD simulation + feedback trails)
     _texMgr = new TextureManager(_device);
-    _texMgr.create('rdA');   // Gray-Scott read  ↔ write each frame
-    _texMgr.create('rdB');
-    _texMgr.create('fbA');   // Feedback trails  ↔ ping-pong
+    // Particle draw target: cleared & redrawn each frame, read by feedback
+    _texMgr.create('particleDraw', WIDTH, HEIGHT, 'rgba16float',
+        GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING);
+    // Feedback trail ping-pong (trail accumulation with decay)
+    _texMgr.create('fbA');
     _texMgr.create('fbB');
 
     _passMgr = new PassManager();
@@ -173,7 +179,7 @@ export async function initRenderer(canvas) {
     console.log('[renderer] WebGPU ready',
         '| adapter:', desc?.description ?? 'unknown',
         '| format:', _presentFormat,
-        '| textures: rdA/rdB fbA/fbB @', WIDTH + '×' + HEIGHT, 'rgba32float');
+        '| sim:', WIDTH + '×' + HEIGHT, '| record:', RECORD_WIDTH + '×' + RECORD_HEIGHT);
 
     return { device: _device, textures: _texMgr, passes: _passMgr };
 }

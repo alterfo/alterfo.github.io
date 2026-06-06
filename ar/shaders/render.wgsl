@@ -1,6 +1,4 @@
-// Render pass: colour map, beat flash, blend modes, slow hue drift.
-// Reads fbB (latest feedback/trails texture) → outputs to swap-chain canvas.
-// V channel of the RD simulation drives the colour gradient.
+// Final render pass: reads particle trail (fbB), tonemaps, hue drift, beat flash.
 
 struct RenderUniforms {
     beat_pulse : f32,   // 0..1, exponential-decay spike on kick
@@ -38,19 +36,12 @@ fn vs_main(@builtin(vertex_index) vi : u32) -> VSOut {
     return out;
 }
 
-// 4-stop colour gradient from uniform colour stops.
-fn colourMap(t: f32) -> vec3<f32> {
-    let s = clamp(t, 0.0, 1.0);
-    if (s < 0.333) {
-        return mix(u.c0.xyz, u.c1.xyz, s * 3.003);
-    } else if (s < 0.666) {
-        return mix(u.c1.xyz, u.c2.xyz, (s - 0.333) * 3.003);
-    }
-    return mix(u.c2.xyz, u.c3.xyz, (s - 0.666) * 3.012);
+// Reinhard-style tonemap — prevents blow-out while preserving colour ratios.
+fn tonemap(c: vec3<f32>) -> vec3<f32> {
+    return c / (c + vec3<f32>(1.0));
 }
 
 // Rotate hue around the grey axis (1,1,1)/√3 using Rodrigues formula.
-// Preserves white (1,1,1) and black (0,0,0).  shift is 0..1 → 0..2π.
 fn hueRotate(col: vec3<f32>, shift: f32) -> vec3<f32> {
     let angle = shift * 6.28318;
     let cosA  = cos(angle);
@@ -79,22 +70,13 @@ fn fs_main(in: VSOut) -> @location(0) vec4<f32> {
         vec2<i32>(0, 0),
         vec2<i32>(i32(fb_sz.x) - 1, i32(fb_sz.y) - 1)
     );
-    // fb_tex stores accumulated RD+warp+feedback state: R=U, G=V
+    // Particle trail: accumulated RGB from coloured particles
     let pix = textureLoad(fb_tex, coord, 0);
-    let v   = clamp(pix.g * 2.5, 0.0, 1.0);   // V channel, amplified
+    var col = tonemap(pix.rgb * 2.8);        // boost then Reinhard
+    col = pow(col, vec3<f32>(0.8));           // mild gamma lift
 
-    var col = colourMap(v);
-
-    // Slow hue drift (only pays when non-negligible)
     if (u.hue_shift > 0.001) {
         col = hueRotate(col, u.hue_shift);
-    }
-
-    // Beat flash: Screen-blend a violet-white pulse when beat_pulse peaks
-    if (u.beat_pulse > 0.7) {
-        let str   = (u.beat_pulse - 0.7) / 0.3;         // 0..1 within flash window
-        let flash = vec3<f32>(str * 0.7, str * 0.35, str * 0.9);
-        col = screen(col, flash);
     }
 
     // blend_mode post-process (meaningful in Advanced multi-layer compositing)

@@ -6,7 +6,7 @@
 
 import { WIDTH, HEIGHT } from './renderer.js';
 
-const RD_ITERATIONS = 6;
+const RD_ITERATIONS = 3;
 const UBO_BYTES     = 64;   // 16 × f32/u32 — see struct RDUniforms in shader
 
 // Default Gray-Scott parameters (branching/coral pattern)
