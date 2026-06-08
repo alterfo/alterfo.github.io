@@ -1,1 +1,0 @@
-import{_ as e,o as t,c as o}from"./chunks/framework.BSR3y9uA.js";const f=JSON.parse('{"title":"Alterfo","description":"","frontmatter":{"title":"Alterfo","layout":"portfolio"},"headers":[],"relativePath":"index.md","filePath":"index.md"}'),a={name:"index.md"};function r(n,i,s,c,d,l){return t(),o("div")}const _=e(a,[["render",r]]);export{f as __pageData,_ as default};
