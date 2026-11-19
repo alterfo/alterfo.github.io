@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://alterfo.ru/about</loc><lastmod>2026-11-19</lastmod><priority>0.6</priority></url>
   <url><loc>https://alterfo.ru/blog</loc><lastmod>2026-11-19</lastmod><priority>0.6</priority></url>
   <url><loc>https://alterfo.ru/casual-games</loc><lastmod>2026-11-19</lastmod><priority>0.8</priority></url>
   <url><loc>https://alterfo.ru/</loc><lastmod>2026-11-19</lastmod><priority>1.0</priority></url>
@@ -38,5 +39,9 @@
   <url><loc>https://alterfo.ru/posts/2026-10-22-ya-pishu-muzyku-v-stile-organik-dauntempo</loc><lastmod>2026-11-19</lastmod><priority>0.6</priority></url>
   <url><loc>https://alterfo.ru/posts/2026-10-28-o-sovmestimosti</loc><lastmod>2026-11-19</lastmod><priority>0.6</priority></url>
   <url><loc>https://alterfo.ru/projects/ar-engine</loc><lastmod>2026-11-19</lastmod><priority>0.7</priority></url>
+  <url><loc>https://alterfo.ru/projects/hypnofactory</loc><lastmod>2026-11-19</lastmod><priority>0.7</priority></url>
+  <url><loc>https://alterfo.ru/projects/polymuse</loc><lastmod>2026-11-19</lastmod><priority>0.7</priority></url>
+  <url><loc>https://alterfo.ru/projects/slither-bot</loc><lastmod>2026-11-19</lastmod><priority>0.7</priority></url>
+  <url><loc>https://alterfo.ru/projects/vacuum-rogues</loc><lastmod>2026-11-19</lastmod><priority>0.7</priority></url>
   <url><loc>https://alterfo.ru/ar/</loc><priority>0.8</priority></url>
 </urlset>
